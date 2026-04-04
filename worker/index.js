@@ -177,7 +177,7 @@ async function handleUpload(request, env, corsHeaders) {
 async function handleListImages(request, env, corsHeaders) {
   const isAdmin = await verifyAdmin(request, env);
 
-  // 如果是普通用户，返回空列表（可根据需要修改）
+  // 如果是普通用户，返回空列表
   if (!isAdmin) {
     return new Response(JSON.stringify({ images: [] }), {
       status: 200,
@@ -412,11 +412,10 @@ async function streamToBase64(readableStream) {
 // Uint8Array 转 Base64（分块处理）
 function uint8ArrayToBase64(uint8Array) {
   let binary = '';
-  const chunkSize = 32768; // 每块 32KB
+  const chunkSize = 32768;
 
   for (let i = 0; i < uint8Array.length; i += chunkSize) {
     const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
-    // 使用循环代替展开运算符
     for (let j = 0; j < chunk.length; j++) {
       binary += String.fromCharCode(chunk[j]);
     }
