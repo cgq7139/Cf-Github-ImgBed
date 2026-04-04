@@ -22,8 +22,8 @@ Cf-Github-ImgBed 是一个基于 Cloudflare Workers 和 Github API 的简易图�
 
 ## 预览
 
-![预览图1](./preview/preview1.png)
-![预览图2](./preview/preview2.png)
+<img src="https://cdn.jsdmirror.cn/gh/Stoeaves/Cf-Github-ImgBed@main/preview/preview1.png" alt="预览图1" />
+<img src="https://cdn.jsdmirror.cn/gh/Stoeaves/Cf-Github-ImgBed@main/preview/preview2.png" alt="预览图2" />
 
 ## 部署
 
