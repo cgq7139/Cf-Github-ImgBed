@@ -1,7 +1,5 @@
-// Cloudflare Worker - 图床后端
-
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml'];
-const MAX_SIZE = 20 * 1024 * 1024; // 20MB
+const MAX_SIZE = 20 * 1024 * 1024;
 
 export default {
   async fetch(request, env) {
@@ -9,7 +7,6 @@ export default {
     const path = url.pathname;
     const method = request.method;
 
-    // CORS headers
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -30,17 +27,17 @@ export default {
       return handleAccelerate(request, env, corsHeaders);
     }
 
-    // 上传图片 API (需要验证)
+    // 上传图片 API
     if (path === '/api/upload' && method === 'POST') {
       return handleUpload(request, env, corsHeaders);
     }
 
-    // 获取图片列表 (需要验证)
+    // 获取图片列表
     if (path === '/api/images' && method === 'GET') {
       return handleListImages(request, env, corsHeaders);
     }
 
-    // 删除图片 (需要验证)
+    // 删除图片
     if (path === '/api/delete' && method === 'DELETE') {
       return handleDeleteImage(request, env, corsHeaders);
     }
@@ -304,11 +301,10 @@ async function handleDeleteImage(request, env, corsHeaders) {
 // 随机图片 API
 async function handleRandomImage(request, env, corsHeaders) {
   const url = new URL(request.url);
-  const requireToken = url.searchParams.get('public') !== 'true';
   const authHeader = request.headers.get('Authorization');
 
   // 如果需要 Token 验证
-  if (requireToken) {
+  if (env.ALLOW_RANDOM_IMAGE_WITHOUT_PWD === 'false') {
     const isValid = authHeader && authHeader.startsWith('Bearer ') && authHeader.slice(7) === env.ADMIN_PASSWORD;
     if (!isValid) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -344,13 +340,13 @@ async function handleRandomImage(request, env, corsHeaders) {
     }
 
     const randomImage = images[Math.floor(Math.random() * images.length)];
-    const rawUrl = `https://raw.githubusercontent.com/${env.GITHUB_USER}/${env.GITHUB_REPO}/main/${randomImage.path}`;
+    const url = `https://cdn.jsdmirror.cn/gh/${env.GITHUB_USER}/${env.GITHUB_REPO}@main/${randomImage.path}`;
 
     // 重定向到图片
     return new Response(null, {
       status: 302,
       headers: {
-        Location: rawUrl,
+        Location: url,
         ...corsHeaders,
       },
     });
