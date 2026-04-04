@@ -123,9 +123,8 @@ async function handleUpload(request, env, corsHeaders) {
     const filename = `${timestamp}-${random}.${ext}`;
     const filePath = `images/${filename}`;
 
-    // 读取文件内容并转为 Base64
-    const buffer = await file.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+    // 流式读取文件并转换为 Base64
+    const base64 = await streamToBase64(file.stream());
 
     // 上传到 GitHub
     const githubResponse = await fetch(
@@ -170,7 +169,7 @@ async function handleUpload(request, env, corsHeaders) {
       },
     );
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ success: false, error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json', ...corsHeaders },
     });
@@ -386,4 +385,46 @@ async function handleAccelerate(request, env, corsHeaders) {
   } catch (error) {
     return new Response('Failed to fetch image', { status: 500, headers: corsHeaders });
   }
+}
+
+// 流式转换为 Base64
+async function streamToBase64(readableStream) {
+  const reader = readableStream.getReader();
+  const chunks = [];
+  let totalLength = 0;
+
+  // 读取所有块
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    totalLength += value.length;
+  }
+
+  // 合并所有块
+  const combined = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  // 分块转换为 Base64
+  return uint8ArrayToBase64(combined);
+}
+
+// Uint8Array 转 Base64（分块处理）
+function uint8ArrayToBase64(uint8Array) {
+  let binary = '';
+  const chunkSize = 32768; // 每块 32KB
+
+  for (let i = 0; i < uint8Array.length; i += chunkSize) {
+    const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+    // 使用循环代替展开运算符
+    for (let j = 0; j < chunk.length; j++) {
+      binary += String.fromCharCode(chunk[j]);
+    }
+  }
+
+  return btoa(binary);
 }

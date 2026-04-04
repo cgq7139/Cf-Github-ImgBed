@@ -84,38 +84,155 @@
       <p>暂无图片，开始上传吧</p>
     </div>
 
-    <!-- 网格视图 -->
-    <div
-      v-if="viewMode === 'grid'"
-      class="image-grid"
-    >
+    <template v-if="!loading">
+      <!-- 网格视图 -->
       <div
-        v-for="image in images"
-        :key="image.path"
-        class="image-card"
+        v-if="viewMode === 'grid'"
+        class="image-grid"
       >
         <div
-          class="image-preview"
-          @click="previewImg(image)"
+          v-for="image in images"
+          :key="image.path"
+          class="image-card"
         >
-          <img
-            :src="image.cdnUrl"
-            :alt="image.name"
-            loading="lazy"
-          />
-          <div class="image-overlay">
-            <span class="preview-icon">🔍</span>
+          <div
+            class="image-preview"
+            @click="previewImg(image)"
+          >
+            <img
+              :src="image.cdnUrl"
+              :alt="image.name"
+              loading="lazy"
+            />
+            <div class="image-overlay">
+              <span class="preview-icon">🔍</span>
+            </div>
+          </div>
+          <div class="image-info">
+            <div
+              class="image-name"
+              :title="image.name"
+            >
+              {{ image.name }}
+            </div>
+            <div class="image-date">{{ formatDate(image.uploadTime) }}</div>
+            <div class="image-actions">
+              <button
+                class="action-btn"
+                @click="copyUrl(image.rawUrl, '原始地址')"
+                title="复制原始地址"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                >
+                  <path
+                    fill="currentColor"
+                    d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
+                  />
+                </svg>
+              </button>
+              <button
+                class="action-btn"
+                @click="copyUrl(image.cdnUrl, 'CDN地址')"
+                title="复制CDN地址"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                >
+                  <path
+                    fill="currentColor"
+                    d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1 0 1.71-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"
+                  />
+                </svg>
+              </button>
+              <button
+                class="action-btn"
+                @click="copyUrl(image.acceleratedUrl, '加速地址')"
+                title="复制加速地址"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                >
+                  <path
+                    fill="currentColor"
+                    d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1 0 1.71-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"
+                  />
+                </svg>
+              </button>
+              <button
+                class="action-btn delete-btn"
+                @click="deleteImage(image)"
+                title="删除"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                >
+                  <path
+                    fill="currentColor"
+                    d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
-        <div class="image-info">
+      </div>
+
+      <!-- 列表视图 -->
+      <div
+        v-if="viewMode === 'list'"
+        class="image-list-view"
+      >
+        <div
+          v-for="image in images"
+          :key="image.path"
+          class="list-item"
+        >
           <div
-            class="image-name"
-            :title="image.name"
+            class="list-item-preview"
+            @click="previewImg(image)"
           >
-            {{ image.name }}
+            <img
+              :src="image.cdnUrl"
+              :alt="image.name"
+              loading="lazy"
+            />
           </div>
-          <div class="image-date">{{ formatDate(image.uploadTime) }}</div>
-          <div class="image-actions">
+          <div class="list-item-info">
+            <div
+              class="list-item-name"
+              :title="image.name"
+            >
+              {{ image.name }}
+            </div>
+            <div class="list-item-date">{{ formatDate(image.uploadTime) }}</div>
+            <div class="list-item-urls">
+              <span
+                class="url-badge"
+                @click="copyUrl(image.rawUrl, '原始地址')"
+                >Raw</span
+              >
+              <span
+                class="url-badge"
+                @click="copyUrl(image.cdnUrl, 'CDN地址')"
+                >CDN</span
+              >
+              <span
+                class="url-badge"
+                @click="copyUrl(image.acceleratedUrl, '加速地址')"
+                >加速</span
+              >
+            </div>
+          </div>
+          <div class="list-item-actions">
             <button
               class="action-btn"
               @click="copyUrl(image.rawUrl, '原始地址')"
@@ -123,44 +240,12 @@
             >
               <svg
                 viewBox="0 0 24 24"
-                width="16"
-                height="16"
+                width="18"
+                height="18"
               >
                 <path
                   fill="currentColor"
                   d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
-                />
-              </svg>
-            </button>
-            <button
-              class="action-btn"
-              @click="copyUrl(image.cdnUrl, 'CDN地址')"
-              title="复制CDN地址"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="16"
-                height="16"
-              >
-                <path
-                  fill="currentColor"
-                  d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1 0 1.71-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"
-                />
-              </svg>
-            </button>
-            <button
-              class="action-btn"
-              @click="copyUrl(image.acceleratedUrl, '加速地址')"
-              title="复制加速地址"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="16"
-                height="16"
-              >
-                <path
-                  fill="currentColor"
-                  d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1 0 1.71-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"
                 />
               </svg>
             </button>
@@ -171,8 +256,8 @@
             >
               <svg
                 viewBox="0 0 24 24"
-                width="16"
-                height="16"
+                width="18"
+                height="18"
               >
                 <path
                   fill="currentColor"
@@ -183,90 +268,7 @@
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- 列表视图 -->
-    <div
-      v-if="viewMode === 'list'"
-      class="image-list-view"
-    >
-      <div
-        v-for="image in images"
-        :key="image.path"
-        class="list-item"
-      >
-        <div
-          class="list-item-preview"
-          @click="previewImg(image)"
-        >
-          <img
-            :src="image.cdnUrl"
-            :alt="image.name"
-            loading="lazy"
-          />
-        </div>
-        <div class="list-item-info">
-          <div
-            class="list-item-name"
-            :title="image.name"
-          >
-            {{ image.name }}
-          </div>
-          <div class="list-item-date">{{ formatDate(image.uploadTime) }}</div>
-          <div class="list-item-urls">
-            <span
-              class="url-badge"
-              @click="copyUrl(image.rawUrl, '原始地址')"
-              >Raw</span
-            >
-            <span
-              class="url-badge"
-              @click="copyUrl(image.cdnUrl, 'CDN地址')"
-              >CDN</span
-            >
-            <span
-              class="url-badge"
-              @click="copyUrl(image.acceleratedUrl, '加速地址')"
-              >加速</span
-            >
-          </div>
-        </div>
-        <div class="list-item-actions">
-          <button
-            class="action-btn"
-            @click="copyUrl(image.rawUrl, '原始地址')"
-            title="复制原始地址"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-            >
-              <path
-                fill="currentColor"
-                d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
-              />
-            </svg>
-          </button>
-          <button
-            class="action-btn delete-btn"
-            @click="deleteImage(image)"
-            title="删除"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-            >
-              <path
-                fill="currentColor"
-                d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
-              />
-            </svg>
-          </button>
-        </div>
-      </div>
-    </div>
+    </template>
 
     <!-- 自定义图片预览模态框（支持滚轮缩放） -->
     <div
@@ -412,7 +414,7 @@
 
 <script setup>
   import { ref, onMounted, onUnmounted } from 'vue';
-  import { showToast, showConfirmDialog } from 'vant';
+  import { showConfirmDialog } from 'vant';
 
   const props = defineProps({
     apiBase: {
@@ -458,7 +460,7 @@
   const fetchImages = async () => {
     loading.value = true;
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('adPwd');
       const response = await fetch(`${__API_URL__}${props.apiBase}/images`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -472,13 +474,7 @@
       const data = await response.json();
       images.value = data.images;
     } catch (error) {
-      showToast({
-        message: `✗ ${error.message}`,
-        type: 'fail',
-        duration: 2000,
-        position: 'center',
-        className: 'center-toast',
-      });
+      cocoMessage.error(`✗ ${error.message}`);
     } finally {
       loading.value = false;
     }
@@ -494,7 +490,7 @@
         confirmButtonColor: '#f56c6c',
       });
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('adPwd');
       const response = await fetch(`${__API_URL__}${props.apiBase}/delete`, {
         method: 'DELETE',
         headers: {
@@ -508,24 +504,12 @@
         throw new Error('删除失败');
       }
 
-      showToast({
-        message: '✓ 删除成功',
-        type: 'success',
-        duration: 1500,
-        position: 'center',
-        className: 'center-toast',
-      });
+      cocoMessage.success('✓ 删除成功');
 
       await fetchImages();
     } catch (error) {
       if (error !== 'cancel') {
-        showToast({
-          message: `✗ ${error.message || '删除失败'}`,
-          type: 'fail',
-          duration: 2000,
-          position: 'center',
-          className: 'center-toast',
-        });
+        cocoMessage.error(`✗ ${error.message || '删除失败'}`);
       }
     }
   };
@@ -534,21 +518,9 @@
   const copyUrl = async (url, type) => {
     try {
       await navigator.clipboard.writeText(url);
-      showToast({
-        message: `✓ ${type}已复制`,
-        type: 'success',
-        duration: 1500,
-        position: 'center',
-        className: 'center-toast',
-      });
+      cocoMessage.success(`✓ ${type}已复制`);
     } catch (err) {
-      showToast({
-        message: '✗ 复制失败，请手动复制',
-        type: 'fail',
-        duration: 2000,
-        position: 'center',
-        className: 'center-toast',
-      });
+      cocoMessage.error('✗ 复制失败，请手动复制');
     }
   };
 
@@ -571,13 +543,7 @@
       currentPreviewName.value = images.value[currentIndex.value].name;
       resetZoom();
     } else {
-      showToast({
-        message: '已是第一张',
-        type: 'info',
-        duration: 1000,
-        position: 'center',
-        className: 'center-toast',
-      });
+      cocoMessage.info('已是第一张');
     }
   };
 
@@ -589,13 +555,7 @@
       currentPreviewName.value = images.value[currentIndex.value].name;
       resetZoom();
     } else {
-      showToast({
-        message: '已是最后一张',
-        type: 'info',
-        duration: 1000,
-        position: 'center',
-        className: 'center-toast',
-      });
+      cocoMessage.info('已是最后一张');
     }
   };
 
@@ -604,13 +564,7 @@
     if (zoomLevel.value < 3) {
       zoomLevel.value += 0.25;
     } else {
-      showToast({
-        message: '已达到最大放大倍数',
-        type: 'info',
-        duration: 1000,
-        position: 'center',
-        className: 'center-toast',
-      });
+      cocoMessage.info('已达到最大放大倍数');
     }
   };
 
@@ -623,13 +577,7 @@
         translateY = 0;
       }
     } else {
-      showToast({
-        message: '已达到最小缩小倍数',
-        type: 'info',
-        duration: 1000,
-        position: 'center',
-        className: 'center-toast',
-      });
+      cocoMessage.info('已达到最小缩小倍数');
     }
   };
 

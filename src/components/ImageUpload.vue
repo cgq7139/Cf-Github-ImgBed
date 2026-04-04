@@ -105,11 +105,18 @@
         </div>
         <div class="upload-status">
           <span
-            v-if="item.status === 'uploading'"
+            v-if="item.status === 'uploading' && item.progress !== 100"
             class="status-uploading"
           >
             <span class="spinner"></span>
             上传中 {{ Math.floor(item.progress) }}%
+          </span>
+          <span
+            v-if="item.status === 'uploading' && item.progress === 100"
+            class="status-uploading"
+          >
+            <span class="spinner"></span>
+            处理中...
           </span>
           <span
             v-if="item.status === 'error'"
@@ -182,7 +189,7 @@
           </div>
           <div class="url-item">
             <span class="url-label">CDN地址:</span>
-            <code>{{ record.urls.jsdelivr }}</code>
+            <code>{{ record.urls.cdn }}</code>
             <button
               class="copy-btn"
               @click="copyToClipboard(record.urls.jsdelivr)"
@@ -207,8 +214,7 @@
 </template>
 
 <script setup>
-  import { ref, computed, onMounted, onUnmounted } from 'vue';
-  import { showToast } from 'vant';
+  import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 
   const props = defineProps({
     apiBase: {
@@ -239,101 +245,106 @@
     return Date.now() + '-' + Math.random().toString(36).substr(2, 9);
   };
 
-  // 压缩图片
-  const compressImage = (file) => {
-    return new Promise((resolve) => {
-      if (file.size < 2 * 1024 * 1024) {
-        resolve(file);
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (e) => {
-        const img = new Image();
-        img.src = e.target.result;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          const maxWidth = 1920;
-          const maxHeight = 1920;
-
-          if (width > maxWidth || height > maxHeight) {
-            if (width > height) {
-              height = (height * maxWidth) / width;
-              width = maxWidth;
-            } else {
-              width = (width * maxHeight) / height;
-              height = maxHeight;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-
-          canvas.toBlob(
-            (blob) => {
-              const compressedFile = new File([blob], file.name, {
-                type: file.type,
-                lastModified: Date.now(),
-              });
-              resolve(compressedFile);
-            },
-            file.type,
-            0.8,
-          );
-        };
-      };
-    });
-  };
-
   // 上传单个文件
-  const uploadFile = async (file, queueItem) => {
-    try {
-      const compressedFile = await compressImage(file);
+  const uploadFile = async (file, queueItem, retryCount = 0) => {
+    const MAX_RETRIES = 3; // 最大重试次数
+    const RETRY_DELAY = 1000; // 重试延迟（毫秒）
 
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
       const formData = new FormData();
-      formData.append('file', compressedFile);
+      formData.append('file', file);
 
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${__API_URL__}${props.apiBase}/upload`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
+      // 真实上传进度
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const percent = (e.loaded / e.total) * 100;
+          queueItem.progress = percent;
+        }
       });
 
-      const data = await response.json();
+      xhr.addEventListener('load', () => {
+        if (xhr.status === 200) {
+          try {
+            const data = JSON.parse(xhr.responseText);
 
-      if (!response.ok) {
-        throw new Error(data.error || '上传失败');
-      }
+            if (data.success) {
+              // 上传成功，从队列中移除
+              const index = uploadQueue.value.findIndex((item) => item.id === queueItem.id);
+              if (index !== -1) {
+                uploadQueue.value.splice(index, 1);
+              }
 
-      // 上传成功，从队列中移除该任务
-      const index = uploadQueue.value.findIndex((item) => item.id === queueItem.id);
-      if (index !== -1) {
-        uploadQueue.value.splice(index, 1);
-      }
+              successRecords.value.unshift({
+                id: queueItem.id,
+                file: file,
+                urls: data.urls,
+                timestamp: Date.now(),
+                retryCount: retryCount, // 记录重试次数
+              });
 
-      // 添加到成功记录中
-      successRecords.value.unshift({
-        id: queueItem.id,
-        file: file,
-        urls: data.urls,
-        timestamp: Date.now(),
+              emit('upload-complete');
+              cocoMessage.success(`${file.name} 上传成功`);
+              resolve(data);
+            } else {
+              // 服务器返回失败
+              const error = new Error(data.error || 'Upload failed');
+              handleRetry(error, file, queueItem, retryCount, resolve, reject);
+            }
+          } catch (error) {
+            // JSON 解析失败
+            handleRetry(error, file, queueItem, retryCount, resolve, reject);
+          }
+        } else {
+          // HTTP 状态码错误
+          const error = new Error(`HTTP ${xhr.status}: ${xhr.statusText}`);
+          handleRetry(error, file, queueItem, retryCount, resolve, reject);
+        }
       });
 
-      emit('upload-complete');
+      xhr.addEventListener('error', () => {
+        const error = new Error('网络错误');
+        handleRetry(error, file, queueItem, retryCount, resolve, reject);
+      });
 
-      showSuccessToast(file.name);
-    } catch (error) {
-      queueItem.status = 'error';
-      queueItem.error = error.message;
-      showErrorToast(file.name, error.message);
+      xhr.addEventListener('timeout', () => {
+        const error = new Error('上传超时');
+        handleRetry(error, file, queueItem, retryCount, resolve, reject);
+      });
+
+      // 设置超时时间（60秒，给重试留更多时间）
+      xhr.timeout = 60000;
+
+      const token = localStorage.getItem('adPwd');
+      xhr.open('POST', `${__API_URL__}${props.apiBase}/upload`);
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.send(formData);
+    });
+
+    // 重试处理函数
+    function handleRetry(error, file, queueItem, currentRetry, resolve, reject) {
+      if (currentRetry < MAX_RETRIES) {
+        const nextRetry = currentRetry + 1;
+        const delay = RETRY_DELAY * Math.pow(2, currentRetry); // 指数退避：1s, 2s, 4s
+
+        queueItem.status = 'retrying';
+        queueItem.error = `${error.message}，正在重试 (${nextRetry}/${MAX_RETRIES})...`;
+        queueItem.progress = 0;
+
+        cocoMessage.warning(`${file.name} ${queueItem.error}`);
+
+        console.log(`重试上传: ${file.name}，第 ${nextRetry} 次重试，等待 ${delay}ms`);
+
+        setTimeout(() => {
+          uploadFile(file, queueItem, nextRetry).then(resolve).catch(reject);
+        }, delay);
+      } else {
+        // 超过最大重试次数
+        queueItem.status = 'error';
+        queueItem.error = `${error.message}（已重试${MAX_RETRIES}次）`;
+        cocoMessage.error(`${file.name} 上传失败: ${queueItem.error}`);
+        reject(error);
+      }
     }
   };
 
@@ -345,34 +356,21 @@
         continue;
       }
 
-      const queueItem = {
+      const queueItem = reactive({
         id: generateId(),
         file,
         progress: 0,
         status: 'uploading',
         error: '',
-      };
+      });
 
       uploadQueue.value.push(queueItem);
 
-      // 模拟进度更新
-      let progress = 0;
-      const interval = setInterval(() => {
-        if (queueItem.status !== 'uploading') {
-          clearInterval(interval);
-          return;
-        }
-        progress += Math.random() * 15;
-        if (progress >= 95) {
-          progress = 95;
-          clearInterval(interval);
-        }
-        queueItem.progress = Math.min(progress, 95);
-      }, 100);
-
       // 执行上传
-      uploadFile(file, queueItem).then(() => {
-        clearInterval(interval);
+      uploadFile(file, queueItem).catch((error) => {
+        queueItem.status = 'error';
+        queueItem.error = error.message;
+        cocoMessage.error(`${file.name} 上传失败: ${error.message}`);
       });
     }
   };
@@ -388,25 +386,13 @@
   // 清除所有失败的任务
   const clearFailed = () => {
     uploadQueue.value = uploadQueue.value.filter((item) => item.status === 'uploading');
-    showToast({
-      message: '✓ 已清除失败的任务',
-      type: 'success',
-      duration: 1500,
-      position: 'center',
-      className: 'center-toast',
-    });
+    cocoMessage.success('✓ 已清除失败的任务');
   };
 
   // 清除所有成功记录
   const clearSuccess = () => {
     successRecords.value = [];
-    showToast({
-      message: '✓ 已清除成功记录',
-      type: 'success',
-      duration: 1500,
-      position: 'center',
-      className: 'center-toast',
-    });
+    cocoMessage.success('✓ 已清除成功记录');
   };
 
   // 移除单条成功记录
@@ -466,27 +452,14 @@
           const urlPattern = /^https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i;
           if (urlPattern.test(text)) {
             try {
-              showToast({
-                message: '⏳ 正在获取图片...',
-                type: 'loading',
-                duration: 1000,
-                position: 'center',
-                className: 'center-toast',
-                forbidClick: true,
-              });
+              cocoMessage.info('⏳ 正在获取图片...');
               const response = await fetch(text);
               const blob = await response.blob();
               const filename = text.split('/').pop().split('?')[0] || 'image.jpg';
               const file = new File([blob], filename, { type: blob.type });
               addToQueue([file]);
             } catch (err) {
-              showToast({
-                message: '✗ 获取图片失败',
-                type: 'fail',
-                duration: 2000,
-                position: 'center',
-                className: 'center-toast',
-              });
+              cocoMessage.error('✗ 获取图片失败');
             }
           }
         });
@@ -501,55 +474,25 @@
   const copyToClipboard = async (text) => {
     try {
       await navigator.clipboard.writeText(text);
-      showToast({
-        message: '✓ 链接已复制',
-        type: 'success',
-        duration: 1500,
-        position: 'center',
-        className: 'center-toast',
-      });
+      cocoMessage.success('✓ 链接已复制');
     } catch (err) {
-      showToast({
-        message: '✗ 复制失败，请手动复制',
-        type: 'fail',
-        duration: 2000,
-        position: 'center',
-        className: 'center-toast',
-      });
+      cocoMessage.error('✗ 复制失败，请手动复制');
     }
   };
 
   // 成功提示
   const showSuccessToast = (filename) => {
-    showToast({
-      message: `✓ ${filename} 上传成功`,
-      type: 'success',
-      duration: 2000,
-      position: 'center',
-      className: 'center-toast',
-    });
+    cocoMessage.success(`✓ ${filename} 上传成功`);
   };
 
   // 失败提示
   const showErrorToast = (filename, errorMsg) => {
-    showToast({
-      message: `✗ ${filename} 上传失败: ${errorMsg}`,
-      type: 'fail',
-      duration: 3000,
-      position: 'center',
-      className: 'center-toast',
-    });
+    cocoMessage.error(`✗ ${filename} 上传失败: ${errorMsg}`);
   };
 
   // 其他提示
   const showWarningToast = (message) => {
-    showToast({
-      message: message,
-      type: 'warning',
-      duration: 2000,
-      position: 'center',
-      className: 'center-toast',
-    });
+    cocoMessage.warning(message);
   };
 
   // 格式化文件大小

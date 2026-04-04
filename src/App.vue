@@ -30,7 +30,7 @@
 
 <script setup>
   import { ref } from 'vue';
-  import { showConfirmDialog, showToast } from 'vant';
+  import { showConfirmDialog } from 'vant';
   import Login from './components/Login.vue';
   import ImageUpload from './components/ImageUpload.vue';
   import ImageList from './components/ImageList.vue';
@@ -41,11 +41,7 @@
 
   const handleLoginSuccess = () => {
     isLoggedIn.value = true;
-    showToast({
-      message: '登录成功',
-      type: 'success',
-      duration: 1500,
-    });
+    cocoMessage.success('登录成功');
   };
 
   const logout = async () => {
@@ -57,11 +53,7 @@
       });
       localStorage.removeItem('adPwd');
       isLoggedIn.value = false;
-      showToast({
-        message: '已退出登录',
-        type: 'success',
-        duration: 1500,
-      });
+      cocoMessage.success('已退出登录');
     } catch (error) {
       // 用户取消退出
     }
