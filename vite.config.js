@@ -8,6 +8,6 @@ export default defineConfig({
     port: 8000,
   },
   define: {
-    __API_URL__: JSON.stringify('https://imgbed-test-service.stoeaves.workers.dev'),
+    __API_URL__: JSON.stringify('http://example.com'),
   },
 });
